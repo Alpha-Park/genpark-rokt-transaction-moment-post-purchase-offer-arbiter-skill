@@ -3,6 +3,20 @@ import json
 import sys
 from client import RoktTransactionMomentPostPurchaseOfferArbiter
 
+from typing import Any, Dict, List, Optional
+
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError as exc:
+    raise SystemExit("MCP requires the mcp package. Run: python -m pip install -r requirements.txt") from exc
+
+mcp = FastMCP('genpark-rokt-transaction-moment-post-purchase-offer-arbiter-skill')
+
+@mcp.tool()
+def arbitrate_offers(transaction_context: Optional[Dict[str, Any]] = None, candidate_offers: Optional[List[Dict[str, Any]]] = None, slot_capacity: int = 2) -> str:
+    """Rank supplied post-purchase offers for the available slots."""
+    return json.dumps(RoktTransactionMomentPostPurchaseOfferArbiter().arbitrate_offers(transaction_context if transaction_context is not None else {}, candidate_offers if candidate_offers is not None else [], slot_capacity))
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
         arbiter = RoktTransactionMomentPostPurchaseOfferArbiter()
@@ -18,28 +32,7 @@ def main():
         print(f"[TEST PASS] Rokt Offer Arbiter Passed! Projected eCPM: ${res['projected_slot_ecpm_usd']}")
         sys.exit(0)
 
-    for line in sys.stdin:
-        if not line.strip():
-            continue
-        try:
-            req = json.loads(line)
-            method = req.get("method")
-            msg_id = req.get("id")
-            if method == "initialize":
-                print(json.dumps({"jsonrpc": "2.0", "id": msg_id, "result": {"serverInfo": {"name": "genpark-rokt-arbiter", "version": "1.0.0"}}}))
-            elif method == "tools/list":
-                print(json.dumps({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": [{"name": "arbitrate_offers", "description": "Rokt post-purchase transaction moment offer arbiter"}]}}))
-            elif method == "tools/call":
-                args = req.get("params", {}).get("arguments", {})
-                arbiter = RoktTransactionMomentPostPurchaseOfferArbiter()
-                out = arbiter.arbitrate_offers(args.get("transaction_context", {}), args.get("candidate_offers", []), args.get("slot_capacity", 2))
-                print(json.dumps({"jsonrpc": "2.0", "id": msg_id, "result": {"content": [{"type": "text", "text": json.dumps(out)}]}}))
-            else:
-                print(json.dumps({"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32601, "message": "Method not found"}}))
-            sys.stdout.flush()
-        except Exception as e:
-            print(json.dumps({"jsonrpc": "2.0", "error": {"code": -32603, "message": str(e)}}))
-            sys.stdout.flush()
+    mcp.run(transport="stdio")
 
 if __name__ == "__main__":
     main()
